@@ -1,10 +1,12 @@
-from django.shortcuts import render
+from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.contrib.auth.views import LoginView
 from .models import Task
 from django.contrib.auth.mixins import LoginRequiredMixin # Требуется вход в систему
-
+from django.views.generic import FormView
+from django.contrib.auth.forms import UserCreationForm  
+from django.contrib.auth import login
 
 
 
@@ -16,6 +18,24 @@ class UserLoginView(LoginView):
         return reverse_lazy('tasks')
 
 
+class RegisterPage(FormView):
+    template_name = 'base/register.html'
+    form_class = UserCreationForm
+    success_url = reverse_lazy('tasks') # reverse_lazy, после успешной обработки формы, перенаправит http://127.0.0.1:8000/ + tasks
+    redirect_authenticated_user = True
+
+    def form_valid(self, form):
+        user = form.save()
+        if user is not None:
+            login(self.request, user)
+        return super(RegisterPage, self).form_valid(form)
+
+    def get(self, *args, **kwargs):
+        if self.request.user.is_authenticated:
+            return redirect('tasks')
+        return super(RegisterPage, self).get(*args, **kwargs)
+        
+
 class TaskList(LoginRequiredMixin, ListView):
     model = Task
     context_object_name = 'tasks'
@@ -24,7 +44,13 @@ class TaskList(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         context['tasks'] = context['tasks'].filter(user=self.request.user)
         context['count'] = context['tasks'].filter(complete=False).count()
+
+        search_input = self.request.GET.get('search-area') # получение search-area будет из введенной формы task_list.html 
+        if search_input:
+            context['tasks'] = context['tasks'].filter(
+                title__icontains=search_input)
         return context
+
 
 class TaskDetail(LoginRequiredMixin, DetailView):
     model = Task
@@ -48,7 +74,7 @@ class TaskUpdate(LoginRequiredMixin, UpdateView):
     success_url = reverse_lazy('tasks')
 
 
-class TaskDeleteView(LoginRequiredMixin ,DeleteView):
+class TaskDeleteView(LoginRequiredMixin, DeleteView):
     model = Task
     fields = '__all__'
     success_url = reverse_lazy('tasks')
